@@ -200,7 +200,8 @@ extensions.
 - **Streaks build habits.** No adult-ADHD evidence that streak loss helps;
   it can add task aversiveness. pomo shows neutral totals.
 - **Phone presence destroys focus.** The “brain drain” finding failed direct
-  replication. Break suggestions are a preference, not a proven rule.
+  replication (Ruiz Pardo & Minda, 2022). Break suggestions are a preference,
+  not a proven rule.
 - **Notifications fix follow-through.** See Nordby et al., 2022.
 - **This app replaces medication or therapy.** It does not. Medication and
   structured psychological treatment are the evidence-based treatments; this
@@ -311,6 +312,10 @@ Education*, 25, 1440. https://doi.org/10.1186/s12909-025-08001-0
 
 Risko, E. F., & Gilbert, S. J. (2016). Cognitive offloading. *Trends in
 Cognitive Sciences*, 20(9), 676–688. https://doi.org/10.1016/j.tics.2016.07.002
+
+Ruiz Pardo, A. C., & Minda, J. P. (2022). Reexamining the “brain drain” effect:
+A replication of Ward et al. (2017). *Acta Psychologica*, 230, 103717.
+https://doi.org/10.1016/j.actpsy.2022.103717
 
 Smits, E. J. C., Wenzel, N., & de Bruin, A. (2025). Investigating the
 effectiveness of self-regulated, Pomodoro, and Flowtime break-taking techniques

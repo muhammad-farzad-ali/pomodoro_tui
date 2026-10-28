@@ -135,8 +135,8 @@ by default because the transition back to work is the hard one.
 ## Design budget
 
 - single static binary, no CGO, no daemon, no network
-- one tick per second only while running
-- target: <50 ms startup, ~25 MB RSS soft cap, <10 MB stripped binary
+- one tick per second only while running; renderer capped at 10 FPS
+- 24 MiB soft memory limit; measured ~21 MB RSS and 3.9 MB stripped binary
 - single-instance lock prevents two terminals from clobbering state
 
 ## Development
