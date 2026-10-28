@@ -95,6 +95,7 @@ func truncateVisible(s string, width int) string {
 	var b strings.Builder
 	visible := 0
 	inEscape := false
+	truncated := false
 	for _, r := range s {
 		if r == '\x1b' {
 			inEscape = true
@@ -108,10 +109,14 @@ func truncateVisible(s string, width int) string {
 		}
 		w := lipgloss.Width(string(r))
 		if visible+w > width {
+			truncated = true
 			break
 		}
 		b.WriteRune(r)
 		visible += w
+	}
+	if truncated {
+		b.WriteString("\x1b[0m")
 	}
 	return b.String()
 }

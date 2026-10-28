@@ -51,8 +51,24 @@ func (m *Model) viewMain() string {
 	now := m.now()
 	panelWidth := clampInt(m.width-10, 26, 76)
 	body := m.viewBody(now)
-	panel := m.theme.Panel().Width(panelWidth).Align(lipgloss.Center).Render(body)
+	panel := m.panel().Width(panelWidth).Align(lipgloss.Center).Render(body)
 	return m.header() + "\n\n" + panel + "\n" + m.footer()
+}
+
+func (m *Model) compact() bool {
+	return m.height < 26
+}
+
+func (m *Model) narrow() bool {
+	return m.width < 52
+}
+
+func (m *Model) panel() lipgloss.Style {
+	style := m.theme.Panel()
+	if m.compact() {
+		style = style.Padding(0, 2)
+	}
+	return style
 }
 
 func (m *Model) header() string {
@@ -77,6 +93,9 @@ func (m *Model) header() string {
 		}
 	}
 	phase := m.theme.Fg(color).Render(strings.ToUpper(phaseLabel))
+	if m.narrow() {
+		return "  " + left + sep + phase + "  "
+	}
 	right := m.theme.Fg(m.theme.Muted).Render(
 		fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks),
 	)
@@ -109,9 +128,6 @@ func (m *Model) viewBody(now time.Time) string {
 
 func (m *Model) viewRunning(now time.Time) string {
 	rem := m.sess.RemainingAt(now)
-	if m.sess.Status != session.StatusRunning {
-		rem = m.sess.RemainingAt(now)
-	}
 	total := m.sess.Total()
 	if total <= 0 {
 		total = time.Second
@@ -127,6 +143,18 @@ func (m *Model) viewRunning(now time.Time) string {
 		status = "BREAK · s skips"
 	case m.sess.Activation:
 		status = "ACTIVATION · small on purpose"
+	}
+	if m.narrow() {
+		switch {
+		case m.sess.Status == session.StatusPaused:
+			status = "PAUSED"
+		case m.sess.IsBreak():
+			status = "BREAK"
+		case m.sess.Activation:
+			status = "ACTIVATION"
+		default:
+			status = "FOCUS"
+		}
 	}
 	statusLine := m.theme.Fg(color).Bold(true).Render(status)
 
@@ -153,18 +181,40 @@ func (m *Model) viewRunning(now time.Time) string {
 		ifThen = m.theme.Fg(m.theme.Muted).Render(ui.Truncate("if "+t, clampInt(m.width-18, 20, 64)))
 	}
 
-	meta := m.theme.Fg(m.theme.Muted).Render(
-		fmt.Sprintf("today %s · %d blocks · %d parked",
-			stats.FormatDuration(m.todayFocusSec), m.todayBlocks, m.parkingCount()),
-	)
+	metaText := fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks)
+	if !m.narrow() {
+		metaText += fmt.Sprintf(" · %d parked", m.parkingCount())
+	}
+	meta := m.theme.Fg(m.theme.Muted).Render(metaText)
 
-	parts := []string{clock, "", statusLine, endLine, "", bar, "", intention}
+	parts := []string{clock}
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, statusLine)
+	if endLine != "" {
+		parts = append(parts, endLine)
+	}
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, bar)
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, intention)
 	if ifThen != "" {
 		parts = append(parts, ifThen)
 	}
-	parts = append(parts, "", meta)
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, meta)
 	if m.toast != "" {
-		parts = append(parts, "", m.theme.Fg(m.theme.Yellow).Render(m.toast))
+		if !m.compact() {
+			parts = append(parts, "")
+		}
+		parts = append(parts, m.theme.Fg(m.theme.Yellow).Render(m.toast))
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, parts...)
 }
@@ -181,25 +231,55 @@ func (m *Model) viewComplete() string {
 	next := ""
 	switch {
 	case m.sess.Activation:
-		next = "enter continue " + stats.FormatDuration(int64(m.cfg.FocusDuration()/time.Second)) + " · b break · q stop"
+		if m.narrow() {
+			next = "enter continue · b break"
+		} else {
+			next = "enter continue " + stats.FormatDuration(int64(m.cfg.FocusDuration()/time.Second)) + " · b break · q stop"
+		}
 	case !m.autoBreakAt.IsZero():
 		left := int(m.autoBreakAt.Sub(m.now()).Seconds() + 0.5)
 		if left < 0 {
 			left = 0
 		}
-		next = fmt.Sprintf("break in %ds · b break · n next · e +%dm", left, m.cfg.ExtendMinutes)
+		if m.narrow() {
+			next = fmt.Sprintf("break in %ds · b · n · e", left)
+		} else {
+			next = fmt.Sprintf("break in %ds · b break · n next · e +%dm", left, m.cfg.ExtendMinutes)
+		}
 	default:
-		next = fmt.Sprintf("b break · n next focus · e +%dm", m.cfg.ExtendMinutes)
+		if m.narrow() {
+			next = fmt.Sprintf("b · n next · e +%dm", m.cfg.ExtendMinutes)
+		} else {
+			next = fmt.Sprintf("b break · n next focus · e +%dm", m.cfg.ExtendMinutes)
+		}
 	}
 
 	intention := m.intentionLine(clampInt(m.width-18, 20, 64))
 	meta := m.theme.Fg(m.theme.Muted).Render(
 		fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks),
 	)
+	if m.narrow() {
+		meta = m.theme.Fg(m.theme.Muted).Render("today " + stats.FormatDuration(m.todayFocusSec))
+	}
 
-	parts := []string{title, "", banked, "", m.theme.Fg(m.theme.Muted).Render(next), "", intention, meta}
+	parts := []string{title}
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, banked)
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, m.theme.Fg(m.theme.Muted).Render(next))
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, intention, meta)
 	if m.toast != "" {
-		parts = append(parts, "", m.theme.Fg(m.theme.Yellow).Render(m.toast))
+		if !m.compact() {
+			parts = append(parts, "")
+		}
+		parts = append(parts, m.theme.Fg(m.theme.Yellow).Render(m.toast))
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, parts...)
 }
@@ -207,13 +287,39 @@ func (m *Model) viewComplete() string {
 func (m *Model) viewBreakDone() string {
 	title := m.theme.Fg(m.theme.Green).Bold(true).Render("BREAK DONE")
 	line := m.theme.Fg(m.theme.FG).Render("Ready when you are.")
-	next := m.theme.Fg(m.theme.Muted).Render(
-		fmt.Sprintf("enter start %s · i change next action · q quit",
-			stats.FormatDuration(int64(m.cfg.FocusDuration()/time.Second))),
-	)
-	parts := []string{title, "", line, "", next}
+	nextText := fmt.Sprintf("enter start %s · i change next action · q quit",
+		stats.FormatDuration(int64(m.cfg.FocusDuration()/time.Second)))
+	if m.narrow() {
+		nextText = "enter start · q quit"
+	}
+	next := m.theme.Fg(m.theme.Muted).Render(nextText)
+	if !m.autoFocusAt.IsZero() {
+		left := int(m.autoFocusAt.Sub(m.now()).Seconds() + 0.5)
+		if left < 0 {
+			left = 0
+		}
+		if m.narrow() {
+			next = m.theme.Fg(m.theme.Muted).Render(fmt.Sprintf("focus in %ds · enter · q", left))
+		} else {
+			next = m.theme.Fg(m.theme.Muted).Render(
+				fmt.Sprintf("starting focus in %ds · enter now · q quit", left),
+			)
+		}
+	}
+	parts := []string{title}
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, line)
+	if !m.compact() {
+		parts = append(parts, "")
+	}
+	parts = append(parts, next)
 	if m.toast != "" {
-		parts = append(parts, "", m.theme.Fg(m.theme.Yellow).Render(m.toast))
+		if !m.compact() {
+			parts = append(parts, "")
+		}
+		parts = append(parts, m.theme.Fg(m.theme.Yellow).Render(m.toast))
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, parts...)
 }
@@ -267,12 +373,18 @@ func (m *Model) footer() string {
 	case m.sess.IsBreak():
 		parts = "space pause · s skip · d dump · p lot · q quit"
 	case m.sess.Status == session.StatusFinished && m.sess.Activation:
-		parts = "enter continue · b break · e +10 · q stop"
+		parts = fmt.Sprintf("enter continue · b break · e +%dm · q stop", m.cfg.ExtendMinutes)
 	case m.sess.Status == session.StatusFinished:
 		parts = "b break · n next · e +10 · q quit"
+	case m.sess.Status == session.StatusPaused:
+		parts = "space resume · e +10 · d dump · i intent · v stats · q quit"
 	default:
 		parts = "space pause · 1 start 5m · 2 focus · 3 deep · d dump · i intent · p lot · v stats · q quit"
 	}
+	return m.staticFooter(parts)
+}
+
+func (m *Model) staticFooter(parts string) string {
 	return m.theme.Fg(m.theme.Muted).Render(ui.Truncate(parts, m.width-4))
 }
 
@@ -281,11 +393,21 @@ func (m *Model) viewStats() string {
 	barWidth := clampInt(m.width-40, 8, 28)
 
 	title := m.theme.Fg(m.theme.Magenta).Bold(true).Render("last 7 days")
-	today := m.theme.Fg(m.theme.FG).Render(fmt.Sprintf(
-		"today  %s · %d blocks · %d parked",
-		stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks, m.summary.ParkingCount,
-	))
-	lines := []string{title, "", today, ""}
+	todayText := fmt.Sprintf("today  %s · %d blocks · %d parked",
+		stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks, m.summary.ParkingCount)
+	if m.narrow() {
+		todayText = fmt.Sprintf("today  %s · %d blocks",
+			stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks)
+	}
+	today := m.theme.Fg(m.theme.FG).Render(todayText)
+	lines := []string{title}
+	if !m.compact() {
+		lines = append(lines, "")
+	}
+	lines = append(lines, today)
+	if !m.compact() {
+		lines = append(lines, "")
+	}
 
 	max := int64(1)
 	for _, d := range m.summary.Days {
@@ -311,49 +433,60 @@ func (m *Model) viewStats() string {
 		lines = append(lines, fmt.Sprintf("%s  %s  %-6s", label, bar, value))
 	}
 
-	lines = append(lines, "",
-		m.theme.Fg(m.theme.Muted).Render(fmt.Sprintf("%d active days · no streaks, no grades", m.summary.ActiveDays)),
-	)
-	if m.summary.TotalBlocks == 0 {
+	activeText := fmt.Sprintf("%d active days · no streaks, no grades", m.summary.ActiveDays)
+	if m.narrow() {
+		activeText = fmt.Sprintf("%d active days", m.summary.ActiveDays)
+	}
+	lines = append(lines, m.theme.Fg(m.theme.Muted).Render(activeText))
+	if m.summary.TotalBlocks == 0 && !m.compact() {
 		lines = append(lines, "", m.theme.Fg(m.theme.Yellow).Render("No completed blocks yet. Try 5 minutes."))
 	}
-	lines = append(lines, "", m.theme.Fg(m.theme.Muted).Render("esc back · q quit"))
 
 	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	panel := m.theme.Panel().Width(panelWidth).Render(body)
-	return m.header() + "\n\n" + panel + "\n" + m.footer()
+	panel := m.panel().Width(panelWidth).Render(body)
+	return m.header() + "\n\n" + panel + "\n" + m.staticFooter("esc back · q quit")
 }
 
 func (m *Model) viewHelp() string {
 	panelWidth := clampInt(m.width-12, 34, 68)
 	title := m.theme.Fg(m.theme.Magenta).Bold(true).Render("keys")
 	rows := [][2]string{
-		{"space", "pause / resume · no ticks while paused"},
-		{"1", "activation sprint (5m)"},
-		{"2", "focus (25m)"},
-		{"3", "deep focus (50m)"},
-		{"e", "extend by 10m"},
-		{"d", "park a distraction, return immediately"},
-		{"i", "next action + optional if-then plan"},
+		{"space", "pause / resume"},
+		{"1", "activation 5m"},
+		{"2", "focus 25m"},
+		{"3", "deep 50m"},
+		{"e", "extend 10m"},
+		{"d", "park thought"},
+		{"i", "next action"},
 		{"p", "parking lot"},
-		{"s", "skip a break (never focus)"},
+		{"s", "skip break"},
 		{"v", "stats"},
-		{"?", "this help"},
-		{"q", "quit · state is saved"},
+		{"?", "help"},
+		{"q", "quit + save"},
 	}
 	var lines []string
-	lines = append(lines, title, "")
+	lines = append(lines, title)
+	if !m.compact() {
+		lines = append(lines, "")
+	}
+	if m.height < 18 && len(rows) > 10 {
+		rows = rows[:10]
+	}
 	for _, r := range rows {
 		key := m.theme.Fg(m.theme.Cyan).Bold(true).Render(fmt.Sprintf("%-6s", r[0]))
 		lines = append(lines, key+"  "+m.theme.Fg(m.theme.FG).Render(r[1]))
 	}
-	lines = append(lines, "",
-		m.theme.Fg(m.theme.Muted).Render("Evidence and caveats: docs/EVIDENCE.md"),
-		m.theme.Fg(m.theme.Muted).Render("No streaks. No grades. Just what you did."),
-		"", m.theme.Fg(m.theme.Muted).Render("esc back · q quit"),
-	)
-	panel := m.theme.Panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
-	return m.header() + "\n\n" + panel + "\n" + m.footer()
+	if !m.compact() {
+		lines = append(lines, "",
+			m.theme.Fg(m.theme.Muted).Render("Evidence and caveats: docs/EVIDENCE.md"),
+			m.theme.Fg(m.theme.Muted).Render("No streaks. No grades. Just what you did."),
+		)
+	}
+	panel := m.panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	if m.height < 18 {
+		return panel + "\n" + m.staticFooter("esc back · q quit")
+	}
+	return m.header() + "\n\n" + panel + "\n" + m.staticFooter("esc back · q quit")
 }
 
 func (m *Model) viewIntention() string {
@@ -363,6 +496,10 @@ func (m *Model) viewIntention() string {
 	if m.firstRun {
 		title = "What's the next physical action?"
 		sub = "No backlog. No planning session. Just the first move."
+	}
+	if m.narrow() {
+		title = "Next action"
+		sub = "Just the first move."
 	}
 
 	nextLabel := m.theme.Fg(m.theme.Muted).Render("NEXT")
@@ -378,6 +515,12 @@ func (m *Model) viewIntention() string {
 	if m.firstRun {
 		hint = "enter start · esc skip · tab switch"
 	}
+	if m.narrow() {
+		hint = "enter save · esc cancel"
+		if m.firstRun {
+			hint = "enter start · esc skip"
+		}
+	}
 
 	lines := []string{
 		m.theme.Fg(m.theme.FG).Bold(true).Render(title),
@@ -391,21 +534,25 @@ func (m *Model) viewIntention() string {
 		"",
 		m.theme.Fg(m.theme.Muted).Render(hint),
 	}
-	panel := m.theme.Panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	panel := m.panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 	return panel
 }
 
 func (m *Model) viewParkingInput() string {
 	panelWidth := clampInt(m.width-12, 32, 68)
+	sub := "Capture the thought now. You are not acting on it."
+	if m.narrow() {
+		sub = "Capture it. Don't act on it."
+	}
 	lines := []string{
 		m.theme.Fg(m.theme.Magenta).Bold(true).Render("Park it"),
-		m.theme.Fg(m.theme.Muted).Render("Capture the thought now. You are not acting on it."),
+		m.theme.Fg(m.theme.Muted).Render(sub),
 		"",
 		m.parkingInput.View(),
 		"",
 		m.theme.Fg(m.theme.Muted).Render("enter save · esc cancel"),
 	}
-	panel := m.theme.Panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	panel := m.panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 	return panel
 }
 
@@ -415,9 +562,13 @@ func (m *Model) viewParking() string {
 	lines := []string{title, ""}
 
 	if len(m.state.Parking) == 0 {
+		empty := "Press d while focusing to capture a distraction."
+		if m.narrow() {
+			empty = "Press d to capture."
+		}
 		lines = append(lines,
 			m.theme.Fg(m.theme.Muted).Render("Nothing parked."),
-			m.theme.Fg(m.theme.Muted).Render("Press d while focusing to capture a distraction."),
+			m.theme.Fg(m.theme.Muted).Render(empty),
 		)
 	} else {
 		maxRows := clampInt(m.height-14, 4, 12)
@@ -441,10 +592,18 @@ func (m *Model) viewParking() string {
 		}
 	}
 
-	lines = append(lines, "",
-		m.theme.Fg(m.theme.Muted).Render("u clear · x delete · enter make next action"),
-		m.theme.Fg(m.theme.Muted).Render("esc back · review at the break, not now"),
-	)
-	panel := m.theme.Panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	lines = append(lines, "")
+	if m.narrow() {
+		lines = append(lines,
+			m.theme.Fg(m.theme.Muted).Render("u clear · x delete"),
+			m.theme.Fg(m.theme.Muted).Render("enter promote · esc back"),
+		)
+	} else {
+		lines = append(lines,
+			m.theme.Fg(m.theme.Muted).Render("u clear · x delete · enter make next action"),
+			m.theme.Fg(m.theme.Muted).Render("esc back · review at the break, not now"),
+		)
+	}
+	panel := m.panel().Width(panelWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 	return panel
 }

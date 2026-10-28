@@ -53,11 +53,12 @@ type Options struct {
 }
 
 type Model struct {
-	cfg   config.Config
-	st    *store.Store
-	state store.State
-	sess  *session.Session
-	theme ui.Theme
+	cfg        config.Config
+	baseConfig config.Config
+	st         *store.Store
+	state      store.State
+	sess       *session.Session
+	theme      ui.Theme
 
 	screen screen
 	modal  modal
@@ -72,6 +73,7 @@ type Model struct {
 
 	ticking     bool
 	autoBreakAt time.Time
+	autoFocusAt time.Time
 
 	nextInput    textinput.Model
 	ifInput      textinput.Model
@@ -91,8 +93,9 @@ type Model struct {
 
 func New(st *store.Store, opts Options) (*Model, error) {
 	state, loadErr := st.Load()
-	cfg := state.Config
-	cfg.Normalize()
+	baseConfig := state.Config
+	baseConfig.Normalize()
+	cfg := baseConfig
 	if opts.FocusMinutes > 0 {
 		cfg.FocusMinutes = clampInt(opts.FocusMinutes, 1, 180)
 	}
@@ -106,14 +109,15 @@ func New(st *store.Store, opts Options) (*Model, error) {
 	}
 
 	m := &Model{
-		cfg:      cfg,
-		st:       st,
-		state:    state,
-		theme:    ui.TokyoNight(),
-		noNotify: opts.NoNotify,
-		now:      nowFn,
-		width:    80,
-		height:   24,
+		cfg:        cfg,
+		baseConfig: baseConfig,
+		st:         st,
+		state:      state,
+		theme:      ui.TokyoNight(),
+		noNotify:   opts.NoNotify,
+		now:        nowFn,
+		width:      80,
+		height:     24,
 	}
 	m.nextInput = newInput(m.theme, "next physical action", 52)
 	m.ifInput = newInput(m.theme, "if …, then I'll park it (optional)", 52)
@@ -193,6 +197,9 @@ func (m *Model) restoreOrStart(now time.Time, activation bool) {
 			m.sess = &s
 			m.state.Session = m.sess
 			m.activation = s.Activation
+			if s.RemainingSec <= 0 {
+				s.Status = session.StatusFinished
+			}
 			return
 
 		case session.StatusFinished:
@@ -225,6 +232,7 @@ func (m *Model) startFocus(now time.Time, d time.Duration, activation bool) {
 	m.activation = activation
 	m.screen = screenMain
 	m.autoBreakAt = time.Time{}
+	m.autoFocusAt = time.Time{}
 	m.save(now)
 }
 
@@ -243,6 +251,7 @@ func (m *Model) startBreak(now time.Time) {
 	m.state.Session = m.sess
 	m.activation = false
 	m.autoBreakAt = time.Time{}
+	m.autoFocusAt = time.Time{}
 	m.screen = screenMain
 	m.save(now)
 }
@@ -257,6 +266,7 @@ func (m *Model) handleFinished(now time.Time, restored bool) {
 	}
 	m.sess.Tick(now)
 	m.autoBreakAt = time.Time{}
+	m.autoFocusAt = time.Time{}
 
 	if m.sess.IsFocus() {
 		if !m.sess.Logged {
@@ -297,6 +307,9 @@ func (m *Model) handleFinished(now time.Time, restored bool) {
 	if !restored {
 		m.notify("Break over", "Ready when you are.")
 	}
+	if m.cfg.AutoStartFocus {
+		m.autoFocusAt = now.Add(5 * time.Second)
+	}
 }
 
 func (m *Model) notify(title, body string) {
@@ -323,7 +336,7 @@ func (m *Model) save(now time.Time) {
 		}
 	}
 	m.state.Session = m.sess
-	m.state.Config = m.cfg
+	m.state.Config = m.baseConfig
 	m.state.LastSaved = now
 	if err := m.st.Save(m.state); err != nil {
 		m.setToast(err.Error())
@@ -339,7 +352,7 @@ func (m *Model) startTicking() tea.Cmd {
 	if m.ticking {
 		return nil
 	}
-	if (m.sess == nil || m.sess.Status != session.StatusRunning) && m.autoBreakAt.IsZero() {
+	if (m.sess == nil || m.sess.Status != session.StatusRunning) && m.autoBreakAt.IsZero() && m.autoFocusAt.IsZero() {
 		return nil
 	}
 	m.ticking = true
@@ -365,6 +378,9 @@ func (m *Model) onTick(now time.Time) tea.Cmd {
 	}
 	if !m.autoBreakAt.IsZero() && !now.Before(m.autoBreakAt) {
 		m.startBreak(now)
+	}
+	if !m.autoFocusAt.IsZero() && !now.Before(m.autoFocusAt) {
+		m.startNextFocus(now)
 	}
 	return m.startTicking()
 }

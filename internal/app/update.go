@@ -304,8 +304,16 @@ func (m *Model) extend(now time.Time) tea.Cmd {
 	if m.sess == nil {
 		return nil
 	}
+	if m.sess.Status == session.StatusFinished && m.sess.IsFocus() {
+		// The finished block is already logged. An extension is a new,
+		// shorter block so its time is counted honestly.
+		m.startFocus(now, m.cfg.ExtendDuration(), false)
+		m.ticking = false
+		return m.startTicking()
+	}
 	m.sess.Extend(now, m.cfg.ExtendDuration())
 	m.autoBreakAt = time.Time{}
+	m.autoFocusAt = time.Time{}
 	m.save(now)
 	if m.sess.Status == session.StatusRunning {
 		m.ticking = false
@@ -322,6 +330,7 @@ func (m *Model) skipBreak(now time.Time) tea.Cmd {
 	m.sess.RemainingSec = 0
 	m.sess.Deadline = time.Time{}
 	m.autoBreakAt = time.Time{}
+	m.autoFocusAt = time.Time{}
 	m.save(now)
 	m.ticking = false
 	return nil
