@@ -21,7 +21,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		return m, m.onTick(time.Time(msg))
+		return m, m.onTick(msg)
 
 	case toastMsg:
 		if msg.id == m.toastID {

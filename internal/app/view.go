@@ -97,7 +97,7 @@ func (m *Model) header() string {
 		return "  " + left + sep + phase + "  "
 	}
 	right := m.theme.Fg(m.theme.Muted).Render(
-		fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks),
+		fmt.Sprintf("today %s · %d %s", stats.FormatDuration(m.todayFocusSec), m.todayBlocks, blockWord(m.todayBlocks)),
 	)
 	leftWidth := lipgloss.Width(left) + lipgloss.Width(sep) + lipgloss.Width(phase)
 	gap := m.width - leftWidth - lipgloss.Width(right) - 4
@@ -178,10 +178,10 @@ func (m *Model) viewRunning(now time.Time) string {
 	intention := m.intentionLine(clampInt(m.width-18, 20, 64))
 	ifThen := ""
 	if t := trimSpace(m.state.IfThen); t != "" {
-		ifThen = m.theme.Fg(m.theme.Muted).Render(ui.Truncate("if "+t, clampInt(m.width-18, 20, 64)))
+		ifThen = m.theme.Fg(m.theme.Muted).Render(ui.Truncate("↳ "+t, clampInt(m.width-18, 20, 64)))
 	}
 
-	metaText := fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks)
+	metaText := fmt.Sprintf("today %s · %d %s", stats.FormatDuration(m.todayFocusSec), m.todayBlocks, blockWord(m.todayBlocks))
 	if !m.narrow() {
 		metaText += fmt.Sprintf(" · %d parked", m.parkingCount())
 	}
@@ -256,7 +256,7 @@ func (m *Model) viewComplete() string {
 
 	intention := m.intentionLine(clampInt(m.width-18, 20, 64))
 	meta := m.theme.Fg(m.theme.Muted).Render(
-		fmt.Sprintf("today %s · %d blocks", stats.FormatDuration(m.todayFocusSec), m.todayBlocks),
+		fmt.Sprintf("today %s · %d %s", stats.FormatDuration(m.todayFocusSec), m.todayBlocks, blockWord(m.todayBlocks)),
 	)
 	if m.narrow() {
 		meta = m.theme.Fg(m.theme.Muted).Render("today " + stats.FormatDuration(m.todayFocusSec))
@@ -388,16 +388,23 @@ func (m *Model) staticFooter(parts string) string {
 	return m.theme.Fg(m.theme.Muted).Render(ui.Truncate(parts, m.width-4))
 }
 
+func blockWord(n int) string {
+	if n == 1 {
+		return "block"
+	}
+	return "blocks"
+}
+
 func (m *Model) viewStats() string {
 	panelWidth := clampInt(m.width-10, 34, 76)
 	barWidth := clampInt(m.width-40, 8, 28)
 
 	title := m.theme.Fg(m.theme.Magenta).Bold(true).Render("last 7 days")
-	todayText := fmt.Sprintf("today  %s · %d blocks · %d parked",
-		stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks, m.summary.ParkingCount)
+	todayText := fmt.Sprintf("today  %s · %d %s · %d parked",
+		stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks, blockWord(m.summary.TodayBlocks), m.summary.ParkingCount)
 	if m.narrow() {
-		todayText = fmt.Sprintf("today  %s · %d blocks",
-			stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks)
+		todayText = fmt.Sprintf("today  %s · %d %s",
+			stats.FormatDuration(m.summary.TodayFocusSec), m.summary.TodayBlocks, blockWord(m.summary.TodayBlocks))
 	}
 	today := m.theme.Fg(m.theme.FG).Render(todayText)
 	lines := []string{title}

@@ -42,6 +42,6 @@ Evidence-grounded ADHD focus timer. See `docs/EVIDENCE.md` for the research basi
 ## M5 — Rigor
 - [x] `docs/EVIDENCE.md` with grades and references
 - [x] README, keybindings, config, caveats
-- [x] Unit tests, `go vet`
-- [ ] Performance check and final polish
-- [ ] Final commit
+- [x] Unit tests, `go vet`, `go test -race`
+- [x] Performance check: 3.9 MB binary, ~20–24 MB RSS, <1% CPU idle tick, 10 FPS render cap
+- [x] Final commit

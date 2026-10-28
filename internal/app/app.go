@@ -37,7 +37,10 @@ const (
 	modalParkingList
 )
 
-type tickMsg time.Time
+type tickMsg struct {
+	at  time.Time
+	seq int
+}
 
 type toastMsg struct{ id int }
 
@@ -72,6 +75,7 @@ type Model struct {
 	now    func() time.Time
 
 	ticking     bool
+	tickSeq     int
 	autoBreakAt time.Time
 	autoFocusAt time.Time
 
@@ -199,6 +203,7 @@ func (m *Model) restoreOrStart(now time.Time, activation bool) {
 			m.activation = s.Activation
 			if s.RemainingSec <= 0 {
 				s.Status = session.StatusFinished
+				m.save(now)
 			}
 			return
 
@@ -356,11 +361,12 @@ func (m *Model) startTicking() tea.Cmd {
 		return nil
 	}
 	m.ticking = true
-	return tickCmd()
+	m.tickSeq++
+	return tickCmd(m.tickSeq)
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+func tickCmd(seq int) tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg{at: t, seq: seq} })
 }
 
 func (m *Model) continueTicking() tea.Cmd {
@@ -368,7 +374,15 @@ func (m *Model) continueTicking() tea.Cmd {
 	return m.startTicking()
 }
 
-func (m *Model) onTick(now time.Time) tea.Cmd {
+func (m *Model) onTick(msg tickMsg) tea.Cmd {
+	if msg.seq != m.tickSeq {
+		// A tick from a chain we abandoned (pause/resume, preset change).
+		return nil
+	}
+	return m.advance(msg.at)
+}
+
+func (m *Model) advance(now time.Time) tea.Cmd {
 	m.ticking = false
 	if m.sess != nil && m.sess.Status == session.StatusRunning {
 		m.sess.Tick(now)

@@ -73,7 +73,7 @@ func TestCompletionLogsOnceAndSchedulesBreak(t *testing.T) {
 	m.sess.RemainingSec = 1
 	m.sess.Deadline = now.Add(time.Second)
 
-	m.onTick(now.Add(2 * time.Second))
+	m.advance(now.Add(2 * time.Second))
 
 	if m.sess.Status != session.StatusFinished {
 		t.Fatalf("status = %s, want finished", m.sess.Status)
@@ -102,7 +102,7 @@ func TestCompletionLogsOnceAndSchedulesBreak(t *testing.T) {
 		t.Fatalf("records after duplicate finish = %d, want 1", len(records))
 	}
 
-	m.onTick(m.autoBreakAt.Add(time.Second))
+	m.advance(m.autoBreakAt.Add(time.Second))
 	if m.sess == nil || !m.sess.IsBreak() {
 		t.Fatalf("session = %#v, want break", m.sess)
 	}
@@ -139,7 +139,7 @@ func TestExtendAfterCompletionStartsNewBlock(t *testing.T) {
 	m, _ := testModel(t, now)
 	m.sess.RemainingSec = 1
 	m.sess.Deadline = now.Add(time.Second)
-	m.onTick(now.Add(2 * time.Second))
+	m.advance(now.Add(2 * time.Second))
 	if m.sess.Status != session.StatusFinished || !m.sess.Logged {
 		t.Fatalf("session = %#v, want finished and logged", m.sess)
 	}
@@ -165,7 +165,7 @@ func TestBreakCanAutoStartFocus(t *testing.T) {
 	m.sess.RemainingSec = 1
 	m.sess.Deadline = now.Add(time.Second)
 
-	m.onTick(now.Add(2 * time.Second))
+	m.advance(now.Add(2 * time.Second))
 	if m.sess.Status != session.StatusFinished {
 		t.Fatalf("break status = %s, want finished", m.sess.Status)
 	}
@@ -173,12 +173,94 @@ func TestBreakCanAutoStartFocus(t *testing.T) {
 		t.Fatal("auto-focus was not scheduled")
 	}
 
-	m.onTick(m.autoFocusAt.Add(time.Second))
+	m.advance(m.autoFocusAt.Add(time.Second))
 	if m.sess == nil || !m.sess.IsFocus() {
 		t.Fatalf("session = %#v, want focus", m.sess)
 	}
 	if m.sess.Status != session.StatusRunning {
 		t.Fatalf("focus status = %s, want running", m.sess.Status)
+	}
+}
+
+func BenchmarkViewRunning(b *testing.B) {
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	dir := b.TempDir()
+	st := store.New(dir)
+	state := store.DefaultState()
+	state.FirstRunDone = true
+	state.NextAction = "write the evidence doc"
+	if err := st.Save(state); err != nil {
+		b.Fatal(err)
+	}
+	m, err := New(st, Options{Now: func() time.Time { return now }, NoNotify: true})
+	if err != nil {
+		b.Fatal(err)
+	}
+	m.width, m.height = 100, 30
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.View()
+	}
+}
+
+func TestCLIOverrideDoesNotPersist(t *testing.T) {
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	st := store.New(dir)
+	state := store.DefaultState()
+	state.FirstRunDone = true
+	if err := st.Save(state); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := New(st, Options{FocusMinutes: 50, NoNotify: true, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.sess.PlannedSec != 3000 {
+		t.Fatalf("session planned = %d, want 3000", m.sess.PlannedSec)
+	}
+	m.save(now)
+
+	got, err := st.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Config.FocusMinutes != 25 {
+		t.Fatalf("persisted focus = %d, want 25", got.Config.FocusMinutes)
+	}
+}
+
+func TestPauseStopsTicking(t *testing.T) {
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	m, _ := testModel(t, now)
+	m.togglePause(now)
+	if m.sess.Status != session.StatusPaused {
+		t.Fatalf("status = %s, want paused", m.sess.Status)
+	}
+	if m.ticking {
+		t.Fatal("still ticking after pause")
+	}
+	if cmd := m.startTicking(); cmd != nil {
+		t.Fatal("startTicking returned a command while paused")
+	}
+}
+
+func TestStaleTickIsIgnored(t *testing.T) {
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	m, _ := testModel(t, now)
+	m.tickSeq = 7
+	m.ticking = true
+	before := m.sess.RemainingSec
+
+	if cmd := m.onTick(tickMsg{at: now.Add(time.Minute), seq: 6}); cmd != nil {
+		t.Fatal("stale tick returned a command")
+	}
+	if m.sess.RemainingSec != before {
+		t.Fatalf("stale tick advanced session: %d -> %d", before, m.sess.RemainingSec)
+	}
+	if !m.ticking {
+		t.Fatal("stale tick cleared the active chain flag")
 	}
 }
 

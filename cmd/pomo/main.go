@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -19,6 +20,11 @@ import (
 var version = "0.1.0"
 
 func main() {
+	// A soft cap keeps the runtime from growing the heap to 30+ MB for a
+	// one-tick-per-second UI. 24 MiB leaves plenty of headroom and is well
+	// below typical terminal apps.
+	debug.SetMemoryLimit(24 << 20)
+
 	var (
 		statsFlag  = flag.Bool("stats", false, "print today and last-7-days summary, then exit")
 		jsonFlag   = flag.Bool("json", false, "with --stats, print machine-readable JSON")
@@ -63,7 +69,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "pomo:", err)
 	}
 
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithFPS(10))
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -76,6 +82,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "pomo:", err)
 		os.Exit(1)
 	}
+}
+
+func blockWord(n int) string {
+	if n == 1 {
+		return "block"
+	}
+	return "blocks"
 }
 
 func printStats(st *store.Store, asJSON bool) {
@@ -106,14 +119,14 @@ func printStats(st *store.Store, asJSON bool) {
 		return
 	}
 
-	fmt.Printf("today  %s · %d blocks · %d parked\n", stats.FormatDuration(summary.TodayFocusSec), summary.TodayBlocks, summary.ParkingCount)
+	fmt.Printf("today  %s · %d %s · %d parked\n", stats.FormatDuration(summary.TodayFocusSec), summary.TodayBlocks, blockWord(summary.TodayBlocks), summary.ParkingCount)
 	fmt.Println("last 7 days")
 	for _, day := range summary.Days {
 		value := stats.FormatDuration(day.FocusSec)
 		if day.FocusSec == 0 {
 			value = "·"
 		}
-		fmt.Printf("  %s  %-6s  %d block(s)\n", day.Date.Format("Mon 02"), value, day.Blocks)
+		fmt.Printf("  %s  %-6s  %d %s\n", day.Date.Format("Mon 02"), value, day.Blocks, blockWord(day.Blocks))
 	}
 	fmt.Printf("%d active days · no streaks, no grades\n", summary.ActiveDays)
 }

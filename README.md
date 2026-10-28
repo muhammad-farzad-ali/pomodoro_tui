@@ -32,6 +32,25 @@ The short version, with the caveats in [`docs/EVIDENCE.md`](docs/EVIDENCE.md):
 
 This is not medical advice and not a substitute for medication or therapy.
 
+```text
+  pomo  ·  FOCUS                                           today 25m · 1 block
+
+    ╭──────────────────────────────────────────────────────────────────────╮
+    │                       █████ █████   █████ █████                      │
+    │                           █ █     █ █   █ █   █                      │
+    │                       █████ █████   █   █ █   █                      │
+    │                       █         █ █ █   █ █   █                      │
+    │                       █████ █████   █████ █████                      │
+    │                                 FOCUS                                │
+    │                             ends at 15:24                            │
+    │         ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+    │                     ▸ draft the evidence section                     │
+    │                  ↳ if I check email, then I park it                  │
+    │                    today 25m · 1 block · 0 parked                    │
+    ╰──────────────────────────────────────────────────────────────────────╯
+  space pause · 1 start 5m · 2 focus · 3 deep · d dump · i intent · p lot · v…
+```
+
 ## Build
 
 ```bash
@@ -117,7 +136,7 @@ by default because the transition back to work is the hard one.
 
 - single static binary, no CGO, no daemon, no network
 - one tick per second only while running
-- target: <50 ms startup, <20 MB RSS, <10 MB stripped binary
+- target: <50 ms startup, ~25 MB RSS soft cap, <10 MB stripped binary
 - single-instance lock prevents two terminals from clobbering state
 
 ## Development
