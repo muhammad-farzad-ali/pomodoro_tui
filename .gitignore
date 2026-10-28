@@ -1,0 +1,15 @@
+# build output
+/pomo
+/dist/
+*.test
+*.out
+
+# local data
+*.json
+*.jsonl
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
